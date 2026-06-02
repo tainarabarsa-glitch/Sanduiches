@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sanduíches da Tai</title>
+  <title>Sanduíches da Tainara</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
@@ -103,13 +103,7 @@
     <p class="section-label">Escolha o sabor</p>
     <div id="cards-sabor"></div>
 
-    <p class="section-label">Quantidade</p>
-    <div class="qty-row">
-      <label>Quantos sanduíches?</label>
-      <button class="qty-btn" onclick="mudarQtd(-1)">−</button>
-      <span class="qty-num" id="qtd-num">1</span>
-      <button class="qty-btn" onclick="mudarQtd(1)">+</button>
-    </div>
+
 
     <p class="section-label">Observações (opcional)</p>
     <textarea class="obs-input" id="obs" rows="2" placeholder="Ex: sem tomate, sem alface..."></textarea>
@@ -156,7 +150,7 @@ const SABORES = [
 ];
 
 let estoque = {};
-let selecionado = null;
+let selecionados = {}; // key -> qty
 let dataSelecionada = null;
 let qtd = 1;
 
@@ -259,45 +253,73 @@ function renderSabores() {
     `;
     if (!esgotado) div.onclick = () => selecionarSabor(s.key, n);
     container.appendChild(div);
+
+    // qty row per card (hidden until selected)
+    const qrow = document.createElement("div");
+    qrow.className = "qty-row";
+    qrow.id = "qty-row-" + n;
+    qrow.style.display = "none";
+    qrow.style.marginBottom = "10px";
+    qrow.innerHTML = `
+      <label style="font-size:13px">Quantidade</label>
+      <button class="qty-btn" onclick="mudarQtd('${s.key}',-1)">−</button>
+      <span class="qty-num" id="qtd-${s.key}">1</span>
+      <button class="qty-btn" onclick="mudarQtd('${s.key}',1)">+</button>
+    `;
+    container.appendChild(qrow);
   });
-  // re-marcar selecionado se ainda válido
-  if (selecionado) {
-    const idx = SABORES.findIndex(s => s.key === selecionado) + 1;
+  // re-marcar selecionados
+  Object.keys(selecionados).forEach(key => {
+    const idx = SABORES.findIndex(s => s.key === key) + 1;
     const card = document.getElementById("card-" + idx);
     const check = document.getElementById("check-" + idx);
+    const qrow = document.getElementById("qty-row-" + idx);
     if (card && !card.classList.contains("esgotado")) {
       card.classList.add("selected");
       if (check) check.classList.add("on");
+      if (qrow) qrow.style.display = "flex";
     } else {
-      selecionado = null;
+      delete selecionados[key];
     }
-  }
+  });
 }
 
 function selecionarSabor(key, n) {
-  selecionado = key;
-  SABORES.forEach((_, i) => {
-    const card = document.getElementById("card-" + (i+1));
-    const check = document.getElementById("check-" + (i+1));
-    if (card) card.classList.toggle("selected", i+1 === n);
-    if (check) check.classList.toggle("on", i+1 === n);
-  });
+  const card = document.getElementById("card-" + n);
+  const check = document.getElementById("check-" + n);
+  const qrow = document.getElementById("qty-row-" + n);
+  if (selecionados[key] !== undefined) {
+    delete selecionados[key];
+    if (card) card.classList.remove("selected");
+    if (check) check.classList.remove("on");
+    if (qrow) qrow.style.display = "none";
+  } else {
+    selecionados[key] = 1;
+    if (card) card.classList.add("selected");
+    if (check) check.classList.add("on");
+    if (qrow) qrow.style.display = "flex";
+    document.getElementById("qtd-" + key).textContent = 1;
+  }
   atualizar();
 }
 
-function mudarQtd(d) {
-  qtd = Math.max(1, Math.min(10, qtd + d));
-  document.getElementById("qtd-num").textContent = qtd;
+function mudarQtd(key, d) {
+  if (selecionados[key] === undefined) return;
+  selecionados[key] = Math.max(1, Math.min(10, selecionados[key] + d));
+  document.getElementById("qtd-" + key).textContent = selecionados[key];
   atualizar();
 }
 
 function atualizar() {
-  const s = SABORES.find(s => s.key === selecionado);
-  const total = s ? s.preco * qtd : 0;
-  const pronto = selecionado && dataSelecionada &&
+  const keys = Object.keys(selecionados);
+  const total = keys.reduce((sum, key) => {
+    const s = SABORES.find(s => s.key === key);
+    return sum + (s ? s.preco * selecionados[key] : 0);
+  }, 0);
+  const pronto = keys.length > 0 && dataSelecionada &&
     document.getElementById("nome").value.trim() &&
     document.getElementById("whatsapp").value.trim();
-  document.getElementById("total-row").style.display = selecionado ? "flex" : "none";
+  document.getElementById("total-row").style.display = keys.length > 0 ? "flex" : "none";
   document.getElementById("total-val").textContent = "R$ " + total.toFixed(2).replace(".", ",");
   document.getElementById("btn-pedir").disabled = !pronto;
 }
@@ -309,30 +331,39 @@ async function confirmar() {
   const nome = document.getElementById("nome").value.trim();
   const whatsapp = document.getElementById("whatsapp").value.trim();
   const obs = document.getElementById("obs").value.trim();
-  const s = SABORES.find(s => s.key === selecionado);
-  const total = s.preco * qtd;
-
+  const keys = Object.keys(selecionados);
   const hoje = fmtDataKey(new Date());
   const tipo = dataSelecionada === hoje ? "pedido" : "reserva";
+
+  const total = keys.reduce((sum, key) => {
+    const s = SABORES.find(s => s.key === key);
+    return sum + (s ? s.preco * selecionados[key] : 0);
+  }, 0);
 
   document.getElementById("btn-pedir").disabled = true;
   document.getElementById("btn-pedir").textContent = "Enviando...";
 
-  try {
-    await fetch(SCRIPT_URL, {
-      method: "POST",
-      body: JSON.stringify({ nome, whatsapp, sabor: selecionado, quantidade: qtd, data: dataSelecionada, tipo, obs }),
-    });
-  } catch(e) {}
+  for (const key of keys) {
+    try {
+      await fetch(SCRIPT_URL, {
+        method: "POST",
+        body: JSON.stringify({ nome, whatsapp, sabor: key, quantidade: selecionados[key], data: dataSelecionada, tipo, obs }),
+      });
+    } catch(e) {}
+  }
 
-  // montar tela de confirmação
   const dataObj = new Date(dataSelecionada + "T12:00:00");
   const { dia, num, mes } = fmtDataLabel(dataObj);
   const dataStr = `${dia}, ${num} de ${mes}`;
 
+  const resumoItens = keys.map(key => {
+    const s = SABORES.find(s => s.key === key);
+    return `${selecionados[key]}x ${s.nome}`;
+  }).join(", ");
+
   document.getElementById("pix-emoji").textContent = tipo === "reserva" ? "📅" : "✅";
   document.getElementById("reserva-tag-box").innerHTML = tipo === "reserva" ? '<span class="reserva-tag">Reserva agendada</span>' : "";
-  document.getElementById("resumo-pedido").textContent = `${qtd}x ${s.nome} — ${nome}`;
+  document.getElementById("resumo-pedido").textContent = `${resumoItens} — ${nome}`;
   document.getElementById("resumo-data").textContent = `📅 ${dataStr}`;
   document.getElementById("resumo-obs").textContent = obs ? `Obs: ${obs}` : "";
   document.getElementById("total-confirmado").textContent = "R$ " + total.toFixed(2).replace(".", ",");
