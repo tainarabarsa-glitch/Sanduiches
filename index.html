@@ -262,9 +262,9 @@ function renderSabores() {
     qrow.style.marginBottom = "10px";
     qrow.innerHTML = `
       <label style="font-size:13px">Quantidade</label>
-      <button class="qty-btn" onclick="mudarQtd('${s.key}',-1)">−</button>
+      <button class="qty-btn" onclick="event.stopPropagation();mudarQtd('${s.key}',-1)">−</button>
       <span class="qty-num" id="qtd-${s.key}">1</span>
-      <button class="qty-btn" onclick="mudarQtd('${s.key}',1)">+</button>
+      <button class="qty-btn" onclick="event.stopPropagation();mudarQtd('${s.key}',1)">+</button>
     `;
     container.appendChild(qrow);
   });
